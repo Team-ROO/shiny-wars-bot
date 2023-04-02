@@ -1,34 +1,53 @@
-const Discord = require('discord.js');
+const { Client, GatewayIntentBits } = require('discord.js');
+const fs = require('fs');
 require('dotenv').config();
 
-const client = new Discord.Client();
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+
 const announcementChannelId = process.env.ANNOUNCEMENT_CHANNEL_ID;
 
 const startDate = new Date('2023-04-02T22:00:00Z');
 const endDate = new Date('2023-04-16T21:00:00Z');
 
-const challenges = [
-  {
-    challengeText: 'Darkrai challenge',
-    timeCompleted: null,
-    timeSent: null,
-    challengeWonBy: null,
-    timeToComplete: null
-  },
-  {
-    challengeText: 'Cresselia challenge',
-    timeCompleted: null,
-    timeSent: null,
-    challengeWonBy: null,
-    timeToComplete: null
-  }
-];
+const stateFile = './state.json';
 
+let challenges;
 let activeChallenge = null;
 let challengeTimeoutId = null;
 
+function loadState() {
+  if (fs.existsSync(stateFile)) {
+    const stateData = fs.readFileSync(stateFile, 'utf8');
+    challenges = JSON.parse(stateData);
+  } else {
+    challenges = [
+      {
+        challengeText: 'Darkrai challenge',
+        timeCompleted: null,
+        timeSent: null,
+        challengeWonBy: null,
+        timeToComplete: null
+      },
+      {
+        challengeText: 'Cresselia challenge',
+        timeCompleted: null,
+        timeSent: null,
+        challengeWonBy: null,
+        timeToComplete: null
+      }
+    ];
+    saveState();
+  }
+}
+
+function saveState() {
+  const stateData = JSON.stringify(challenges, null, 2);
+  fs.writeFileSync(stateFile, stateData, 'utf8');
+}
+
 client.once('ready', () => {
   console.log('Bot is online!');
+  loadState();
   scheduleChallenge();
 });
 
@@ -146,11 +165,29 @@ client.on('message', message => {
       return;
     }
 
-    activeChallenge.timeToComplete = activeChallenge.timeCompleted - activeChallenge.timeSent;
-    message.reply(`Congratulations, ${activeChallenge.challengeWonBy} completed the challenge in ${activeChallenge.timeToComplete / 60000} minutes!`);
-    clearTimeout(challengeTimeoutId);
-    activeChallenge = null;
+  // Mark the active challenge as completed and record the completion time and winner
+  activeChallenge.timeCompleted = new Date();
+
+    // Set the challengeWonBy field based on the message content
+    if (/^c(resselia)?$/i.test(message.content)) {
+      activeChallenge.challengeWonBy = 'Cresselia';
+      console.log('Challenge won by Cresselia');
+    } else if (/^d(arkrai)?$/i.test(message.content)) {
+      activeChallenge.challengeWonBy = 'Darkrai';
+      console.log('Challenge won by Darkrai');
+    } else {
+      message.reply('Invalid challenge completion command!');
+      return;
+    }
   }
+
+  activeChallenge.timeToComplete = activeChallenge.timeCompleted - activeChallenge.timeSent;
+  message.reply(`Congratulations, ${activeChallenge.challengeWonBy} completed the challenge in ${activeChallenge.timeToComplete / 60000} minutes!`);
+  clearTimeout(challengeTimeoutId);
+  activeChallenge = null;
+
+  // Save the updated state to the file
+  saveState();
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);
