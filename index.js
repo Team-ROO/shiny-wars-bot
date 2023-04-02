@@ -1,17 +1,16 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const fs = require('fs');
+const initialState = require('./initialState.json');
 require('dotenv').config();
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 
 const announcementChannelId = process.env.ANNOUNCEMENT_CHANNEL_ID;
 
-const startDate = new Date('Sat Apr 01 2023 20:00:55 GMT-0400 (Eastern Daylight Time)');
-const durationInMinutes = 20;
-const endDate = new Date(startDate.getTime() + durationInMinutes * 60 * 1000);
-
-const numberOfNotifications = 14;
-const intervalInMinutes = durationInMinutes / numberOfNotifications;
+const startDate = new Date();
+const endDate = new Date(startDate.getTime() + 15 * 60000);
+const challengeInterval = 1;
+const teamNames = ['Darkrai', "Cresselia", "Bidoof", "None"];
 
 const stateFile = './state.json';
 
@@ -20,174 +19,71 @@ let activeChallenge = null;
 let challengeTimeoutId = null;
 
 function loadState() {
+  console.log('inside loadState');
   if (fs.existsSync(stateFile)) {
     const stateData = fs.readFileSync(stateFile, 'utf8');
     challenges = JSON.parse(stateData);
   } else {
-    challenges = [
-      {
-        challengeText: 'Darkrai challenge',
-        timeCompleted: null,
-        timeSent: null,
-        challengeWonBy: null,
-        timeToComplete: null
-      },
-      {
-        challengeText: 'Cresselia challenge',
-        timeCompleted: null,
-        timeSent: null,
-        challengeWonBy: null,
-        timeToComplete: null
-      }
-    ];
+    challenges = initialState;
     saveState();
   }
+  console.log('End of loadState')
 }
 
 function saveState() {
+  console.log('inside saveState');
   const stateData = JSON.stringify(challenges, null, 2);
   fs.writeFileSync(stateFile, stateData, 'utf8');
+}
+
+function scheduleChallenge() {
+  console.log('inside scheduleChallenge');
+  if (new Date() >= endDate) {
+    return;
+  }
+
+  if (challengeTimeoutId !== null) {
+    clearTimeout(challengeTimeoutId);
+  }
+
+  challengeTimeoutId = setTimeout(() => {
+    const nextChallenge = challenges.find(challenge => challenge.timeSent === null);
+
+    if (nextChallenge) {
+      activeChallenge = nextChallenge;
+      activeChallenge.timeSent = new Date().toISOString();
+      saveState();
+      client.channels.cache.get(announcementChannelId).send(activeChallenge.challengeText);
+    }
+  }, challengeInterval * 60000);
 }
 
 client.once('ready', () => {
   console.log('Bot is online!');
   loadState();
-  scheduleChallenge();
 });
 
-function scheduleChallenge() {
-  const currentTime = new Date();
-
-  // Check if the current time is within the start and end dates
-  if (currentTime >= startDate && currentTime <= endDate) {
-    // Expire the active challenge, if there is one
-    if (activeChallenge) {
-      activeChallenge.timeCompleted = null;
-      activeChallenge.challengeWonBy = null;
-      activeChallenge.timeToComplete = null;
-      activeChallenge = null;
-      clearTimeout(challengeTimeoutId);
-    }
-
-    // Get the available challenges
-    const availableChallenges = challenges.filter(challenge => challenge !== activeChallenge);
-
-    // If all challenges have been used, reset the active challenge and used challenges
-    if (availableChallenges.length === 0) {
-      activeChallenge = null;
-      challenges.forEach(challenge => {
-        challenge.timeCompleted = null;
-        challenge.challengeWonBy = null;
-        challenge.timeToComplete = null;
-      });
-    }
-
-    // Select a random challenge from the available challenges
-    const randomIndex = Math.floor(Math.random() * availableChallenges.length);
-    const selectedChallenge = availableChallenges[randomIndex];
-
-    // Set the selected challenge as the active challenge
-    activeChallenge = selectedChallenge;
-
-    // Generate a random time between 12:00am and 11:59pm
-    const randomHour = Math.floor(Math.random() * 24);
-    const randomMinute = Math.floor(Math.random() * 60);
-    const challengeTime = new Date();
-    challengeTime.setHours(randomHour);
-    challengeTime.setMinutes(randomMinute);
-
-    // Calculate the time until the next challenge
-    let timeUntilChallenge = startDate.getTime() + Math.floor(((currentTime - startDate) / (intervalInMinutes * 60 * 1000) + 1) * intervalInMinutes * 60 * 1000) - currentTime.getTime();
-
-    // Schedule the challenge and the 10-minute warning
-    challengeTimeoutId = setTimeout(() => {
-      const challengeChannel = client.channels.cache.get(announcementChannelId);
-      challengeChannel.send(selectedChallenge.challengeText);
-      selectedChallenge.timeSent = new Date();
-
-      // Schedule the 10-minute warning
-      setTimeout(() => {
-        if (activeChallenge === selectedChallenge && !activeChallenge.timeCompleted) {
-          challengeChannel.send('Only 10 minutes left to complete the challenge!');
-        }
-      }, 20 * 60 * 1000);
-
-      scheduleChallenge();
-    }, timeUntilChallenge);
-  } else {
-    // Expire the active challenge, if there is one
-    if (activeChallenge) {
-      activeChallenge.timeCompleted = null;
-      activeChallenge.challengeWonBy = null;
-      activeChallenge.timeToComplete = null;
-      activeChallenge = null;
-      clearTimeout(challengeTimeoutId);
-    }
-    // If the current time is outside the start and end dates, schedule the next challenge for the start date
-    const timeUntilStart = startDate.getTime() - currentTime.getTime();
-    setTimeout(() => {
-      scheduleChallenge();
-    }, timeUntilStart);
-  }
-}
-
-client.on('message', message => {
-  // Ignore messages sent by the bot itself
-  if (message.author.bot) {
-    return;
+client.on('messageCreate', message => {
+  if (message.content.startsWith('!challenge start')) {
+    scheduleChallenge();
+    message.channel.send(`Shiny Wars Challenges have started!`);
   }
 
-  // Check if the message is a challenge completion command
   if (message.content.startsWith('!challenge complete')) {
-    // Check if the user has the Owner, Executive, or Admin role
-    if (!message.member.roles.cache.some(role => role.name === 'Owner' || role.name === 'Executive' || role.name === 'Admin')) {
-      message.reply('You do not have permission to complete challenges!');
-      return;
-    }
-    // Check if there is an active challenge
-    if (!activeChallenge) {
-      message.reply('There is no active challenge!');
-      return;
-    }
+    const teamName = message.content.split(' ')[2];
 
-    // Mark the active challenge as completed and record the completion time and winner
-    activeChallenge.timeCompleted = new Date();
+    if (teamNames.includes(teamName) && activeChallenge && activeChallenge.timeCompleted === null) {
+      activeChallenge.timeCompleted = new Date().toISOString();
+      activeChallenge.challengeWonBy = teamName;
+      activeChallenge.timeToComplete = (new Date(activeChallenge.timeCompleted) - new Date(activeChallenge.timeSent)) / 1000;
+      saveState();
+      message.channel.send(`Team ${teamName} has completed the challenge!`);
 
-    // Set the challengeWonBy field based on the message content
-    if (/^c(resselia)?$/i.test(message.content)) {
-      activeChallenge.challengeWonBy = 'Cresselia';
-      console.log('Challenge won by Cresselia');
-    } else if (/^d(arkrai)?$/i.test(message.content)) {
-      activeChallenge.challengeWonBy = 'Darkrai';
-      console.log('Challenge won by Darkrai');
+      scheduleChallenge();
     } else {
-      message.reply('Invalid challenge completion command!');
-      return;
-    }
-
-    // Mark the active challenge as completed and record the completion time and winner
-    activeChallenge.timeCompleted = new Date();
-
-    // Set the challengeWonBy field based on the message content
-    if (/^c(resselia)?$/i.test(message.content)) {
-      activeChallenge.challengeWonBy = 'Cresselia';
-      console.log('Challenge won by Cresselia');
-    } else if (/^d(arkrai)?$/i.test(message.content)) {
-      activeChallenge.challengeWonBy = 'Darkrai';
-      console.log('Challenge won by Darkrai');
-    } else {
-      message.reply('Invalid challenge completion command!');
-      return;
+      message.channel.send(`Invalid team name or no active challenge.`);
     }
   }
-
-  activeChallenge.timeToComplete = activeChallenge.timeCompleted - activeChallenge.timeSent;
-  message.reply(`Congratulations, ${activeChallenge.challengeWonBy} completed the challenge in ${activeChallenge.timeToComplete / 60000} minutes!`);
-  clearTimeout(challengeTimeoutId);
-  activeChallenge = null;
-
-  // Save the updated state to the file
-  saveState();
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);
