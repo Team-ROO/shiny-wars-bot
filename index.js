@@ -8,8 +8,8 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 const announcementChannelId = process.env.ANNOUNCEMENT_CHANNEL_ID;
 
 const startDate = new Date();
-const endDate = new Date(startDate.getTime() + 15 * 60000);
-const challengeInterval = 1;
+const endDate = new Date("2023-04-16T16:00:00-04:00");
+const challengeInterval = 24 * 60; // 1 day in minutes
 const teamNames = ['Darkrai', "Cresselia", "Bidoof", "None"];
 
 const stateFile = './state.json';
@@ -53,7 +53,7 @@ function scheduleChallenge() {
       activeChallenge = nextChallenge;
       activeChallenge.timeSent = new Date().toISOString();
       saveState();
-      client.channels.cache.get(announcementChannelId).send(activeChallenge.challengeText);
+      client.channels.cache.get(announcementChannelId).send(`@here ${activeChallenge.challengeText}`);
     }
   }, challengeInterval * 60000);
 }
