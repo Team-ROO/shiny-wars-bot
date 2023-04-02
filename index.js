@@ -6,8 +6,12 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 
 const announcementChannelId = process.env.ANNOUNCEMENT_CHANNEL_ID;
 
-const startDate = new Date('2023-04-02T22:00:00Z');
-const endDate = new Date('2023-04-16T21:00:00Z');
+const startDate = new Date('Sat Apr 01 2023 20:00:55 GMT-0400 (Eastern Daylight Time)');
+const durationInMinutes = 20;
+const endDate = new Date(startDate.getTime() + durationInMinutes * 60 * 1000);
+
+const numberOfNotifications = 14;
+const intervalInMinutes = durationInMinutes / numberOfNotifications;
 
 const stateFile = './state.json';
 
@@ -93,11 +97,7 @@ function scheduleChallenge() {
     challengeTime.setMinutes(randomMinute);
 
     // Calculate the time until the next challenge
-    let timeUntilChallenge = challengeTime.getTime() - currentTime.getTime();
-    if (timeUntilChallenge < 0) {
-      // If the challenge time is in the past, schedule it for the next day instead
-      timeUntilChallenge += 24 * 60 * 60 * 1000;
-    }
+    let timeUntilChallenge = startDate.getTime() + Math.floor(((currentTime - startDate) / (intervalInMinutes * 60 * 1000) + 1) * intervalInMinutes * 60 * 1000) - currentTime.getTime();
 
     // Schedule the challenge and the 10-minute warning
     challengeTimeoutId = setTimeout(() => {
@@ -165,8 +165,8 @@ client.on('message', message => {
       return;
     }
 
-  // Mark the active challenge as completed and record the completion time and winner
-  activeChallenge.timeCompleted = new Date();
+    // Mark the active challenge as completed and record the completion time and winner
+    activeChallenge.timeCompleted = new Date();
 
     // Set the challengeWonBy field based on the message content
     if (/^c(resselia)?$/i.test(message.content)) {
